@@ -1,0 +1,27 @@
+{
+  "name": "fall-town-detective",
+  "version": "1.0.0",
+  "description": "Fall Town Detective RPG - 100-level anime mystery game",
+  "main": "index.js",
+  "scripts": {
+    "dev": "http-server",
+    "build": "echo 'Web app ready in www/ directory'",
+    "build:android": "npm run build && npx cap sync android && npx cap open android",
+    "build:ios": "npm run build && npx cap sync ios && npx cap open ios",
+    "build:all": "npm run build && npx cap sync && npm run build:android && npm run build:ios",
+    "sync": "npx cap sync",
+    "open:android": "npx cap open android",
+    "open:ios": "npx cap open ios",
+    "update:capacitor": "npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest @capacitor/ios@latest"
+  },
+  "keywords": ["game", "detective", "rpg", "anime", "mobile"],
+  "author": "obis2634-design",
+  "license": "MIT",
+  "devDependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/ios": "^6.0.0",
+    "http-server": "^14.1.1"
+  }
+}
