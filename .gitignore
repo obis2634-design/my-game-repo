@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Build outputs
+www/
+build/
+dist/
+
+# Platform-specific
+android/
+ios/
+
+# IDE
+.vscode/
+.idea/
+*.xcworkspace/
+*.xcodeproj/userdata/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Signing keys (IMPORTANT: Never commit!)
+*.keystore
+*.jks
+*.p8
+*.p12
+*.cer
+*.key
+
+# Secrets
+secrets/
+.secrets
