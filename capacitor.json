@@ -1,0 +1,22 @@
+{
+  "appId": "com.falltown.detective",
+  "appName": "Fall Town Detective",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "capacitor"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 3000,
+      "backgroundColor": "#111111",
+      "showSpinner": true,
+      "spinnerColor": "#ff4500"
+    },
+    "StatusBar": {
+      "style": "dark",
+      "backgroundColor": "#111111"
+    }
+  }
+}
