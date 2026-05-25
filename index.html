@@ -20,15 +20,31 @@
             background: rgba(20, 20, 30, 0.95); color: #fff;
             border: 3px solid #ff4500; border-radius: 8px; padding: 15px;
             box-sizing: border-box; display: none; z-index: 10;
+            animation: slideUp 0.3s ease-out;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(30px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
         #customizer { top: 10%; max-height: 80%; overflow-y: auto; }
-        #dialogueBox { bottom: 5%; min-height: 120px; }
-        #puzzleBox { top: 20%; text-align: center; }
+        #dialogueBox { bottom: 5%; min-height: 120px; animation: fadeIn 0.2s ease-out; }
+        #puzzleBox { top: 20%; text-align: center; animation: scaleIn 0.3s ease-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes scaleIn {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
         .ui-row { margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
         .ui-btn {
             background: #ff4500; color: white; border: none; padding: 8px 16px;
             font-weight: bold; font-size: 14px; border-radius: 4px; cursor: pointer;
+            transition: all 0.2s;
         }
+        .ui-btn:hover { background: #ff6b00; transform: scale(1.05); }
+        .ui-btn:active { transform: scale(0.95); }
         .ui-input { background: #222; color: #fff; border: 1px solid #555; padding: 5px; width: 120px; }
         select { background: #222; color: #fff; padding: 5px; border-radius: 4px; }
     </style>
@@ -74,6 +90,68 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+// Particle system for animations
+class Particle {
+    constructor(x, y, type = 'leaf') {
+        this.x = x;
+        this.y = y;
+        this.type = type;
+        this.life = 1;
+        this.decay = Math.random() * 0.005 + 0.002;
+        
+        if (type === 'leaf') {
+            this.vx = Math.random() * 2 - 1;
+            this.vy = Math.random() * 0.5 + 0.3;
+            this.rotation = Math.random() * Math.PI * 2;
+            this.rotSpeed = Math.random() * 0.1 - 0.05;
+        } else if (type === 'spark') {
+            this.vx = Math.random() * 4 - 2;
+            this.vy = Math.random() * -4 - 1;
+            this.size = Math.random() * 3 + 2;
+        } else if (type === 'fog') {
+            this.vx = Math.random() * 0.5 - 0.25;
+            this.vy = 0;
+            this.size = Math.random() * 30 + 20;
+        }
+    }
+    
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= this.decay;
+        
+        if (this.type === 'leaf') {
+            this.rotation += this.rotSpeed;
+            this.vy += 0.02;
+        } else if (this.type === 'spark') {
+            this.vy += 0.1;
+        }
+    }
+    
+    draw(ctx) {
+        ctx.globalAlpha = this.life;
+        
+        if (this.type === 'leaf') {
+            ctx.fillStyle = '#d4a574';
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.rotation);
+            ctx.fillRect(-5, -2, 10, 4);
+            ctx.restore();
+        } else if (this.type === 'spark') {
+            ctx.fillStyle = '#ffaa00';
+            ctx.fillRect(this.x, this.y, this.size, this.size);
+        } else if (this.type === 'fog') {
+            ctx.fillStyle = 'rgba(200, 200, 220, 0.1)';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        ctx.globalAlpha = 1;
+    }
+}
+
 // Game State Engine
 const game = {
     state: 'MENU', 
@@ -85,12 +163,20 @@ const game = {
     dialogue: { queue: [], active: false, callback: null },
     puzzle: { active: false, answer: "", successCallback: null },
     secretsFound: 0,
+    particles: [],
+    screenShake: 0,
+    npcAnimations: {},
+    timeOfDay: 'dusk',
     
     init() {
         this.resize();
         window.addEventListener('resize', () => this.resize());
         this.setupTouchControls();
         document.getElementById('customizer').style.display = 'block';
+        
+        // Spawn ambient particles
+        this.spawnAmbientParticles();
+        
         // Run Loop
         setInterval(() => this.update(), 1000/60);
         this.renderLoop();
@@ -102,7 +188,6 @@ const game = {
     },
 
     setupTouchControls() {
-        // Absolute touch movement mechanics for mobile screen sizing
         canvas.addEventListener('touchstart', (e) => {
             if (this.state !== 'PLAY') return;
             this.controls.active = true;
@@ -119,13 +204,30 @@ const game = {
 
     updateTouchCoords(e) {
         const touch = e.touches[0];
-        // Strategy: Target coordinates dictate the pathing vector for the sprite
         this.controls.x = touch.clientX;
         this.controls.y = touch.clientY;
     },
 
+    spawnAmbientParticles() {
+        // Spawn leaves constantly
+        if (Math.random() < 0.05 && this.particles.length < 50) {
+            this.particles.push(new Particle(Math.random() * canvas.width, -10, 'leaf'));
+        }
+        // Spawn fog
+        if (Math.random() < 0.02 && this.particles.filter(p => p.type === 'fog').length < 10) {
+            this.particles.push(new Particle(Math.random() * canvas.width, canvas.height * 0.6, 'fog'));
+        }
+    },
+
     update() {
         if (this.state !== 'PLAY' || this.dialogue.active || this.puzzle.active) return;
+
+        // Update particles
+        this.particles = this.particles.filter(p => p.life > 0);
+        this.particles.forEach(p => p.update());
+        
+        // Spawn ambient particles
+        this.spawnAmbientParticles();
 
         // Player Movement Calculations
         if (this.controls.active) {
@@ -136,12 +238,21 @@ const game = {
             if (distance > 5) {
                 this.mc.x += (dx / distance) * 4;
                 this.mc.y += (dy / distance) * 4;
+                this.mc.isWalking = true;
+                this.mc.walkFrame = (this.mc.walkFrame || 0) + 1;
+            } else {
+                this.mc.isWalking = false;
             }
+        } else {
+            this.mc.isWalking = false;
         }
 
         // Keep Player inside boundaries
         this.mc.x = Math.max(50, Math.min(canvas.width - 50, this.mc.x));
         this.mc.y = Math.max(100, Math.min(canvas.height - 100, this.mc.y));
+
+        // Screen shake decay
+        if (this.screenShake > 0) this.screenShake -= 1;
 
         // Interaction Collision Proximity checks
         this.checkCollisions();
@@ -151,8 +262,9 @@ const game = {
         // Object Collision Check: NPC/Clues
         const npcDist = Math.hypot(this.mc.x - (canvas.width/2), this.mc.y - (canvas.height/2 - 40));
         if (npcDist < 45 && this.controls.active) {
-            this.controls.active = false; 
-            this.triggerLevelEvent();
+            this.controls.active = false;
+            this.triggerNPCSurprise();
+            setTimeout(() => this.triggerLevelEvent(), 500);
         }
         
         // Easter Egg / Hidden Spot proximity calculation
@@ -163,6 +275,18 @@ const game = {
         }
     },
 
+    triggerNPCSurprise() {
+        // Spawn surprise effect
+        const npcX = canvas.width / 2;
+        const npcY = canvas.height / 2 - 40;
+        
+        for (let i = 0; i < 8; i++) {
+            this.particles.push(new Particle(npcX, npcY, 'spark'));
+        }
+        this.screenShake = 8;
+        this.npcAnimations.surprised = 30;
+    },
+
     triggerLevelEvent() {
         if (this.level === 100) {
             this.showDialogue([
@@ -171,13 +295,13 @@ const game = {
                 { s: "SERIAL KILLER", t: "To disarm the master detonator, you must solve my final math paradox code!" }
             ], () => {
                 this.showPuzzle("Level 100: The Final Paradox", "Multiply the Level Count (100) by the number of letters in Fall Town (8).", "800", () => {
+                    this.triggerVictoryAnimation();
                     this.state = 'VICTORY';
                 });
             });
             return;
         }
 
-        // Procedural Case Type Engine based on level milestones
         const isMurderCase = this.level % 2 === 0;
         if (isMurderCase) {
             this.showDialogue([
@@ -186,6 +310,7 @@ const game = {
                 { s: "Suspect NPC", t: "I swear I didn't steal it! Check the security logs!" }
             ], () => {
                 this.showPuzzle(`Level ${this.level} Crime Scene Lock`, `Enter: 100 minus ${this.level}`, (100 - this.level).toString(), () => {
+                    this.triggerPuzzleSolveAnimation();
                     this.nextLevel();
                 });
             });
@@ -195,14 +320,34 @@ const game = {
                 { s: this.li.name, t: "The museum's masterpiece painting was taken. The thief left a puzzle." }
             ], () => {
                 this.showPuzzle(`Level ${this.level} Riddle`, "Type the word 'CLUE' to unlock the fingerprint scanner.", "CLUE", () => {
+                    this.triggerPuzzleSolveAnimation();
                     this.nextLevel();
                 });
             });
         }
     },
 
+    triggerPuzzleSolveAnimation() {
+        // Spawn celebration sparks
+        for (let i = 0; i < 15; i++) {
+            this.particles.push(new Particle(canvas.width / 2, canvas.height / 2, 'spark'));
+        }
+        this.screenShake = 10;
+    },
+
+    triggerVictoryAnimation() {
+        // Big explosion of particles
+        for (let i = 0; i < 40; i++) {
+            this.particles.push(new Particle(canvas.width / 2, canvas.height / 2, 'spark'));
+        }
+        this.screenShake = 20;
+    },
+
     discoverSecret() {
         this.secretsFound++;
+        for (let i = 0; i < 20; i++) {
+            this.particles.push(new Particle(80, canvas.height - 120, 'spark'));
+        }
         this.showDialogue([
             { s: "EASTER EGG UNLOCKED", t: "You checked behind the old pixel vending machine... Found a developer note: 'Thanks for playing Fall Town!'" }
         ]);
@@ -211,7 +356,6 @@ const game = {
     nextLevel() {
         if (this.level < this.maxLevels) {
             this.level++;
-            // Respawn actor dynamically to avoid loop triggers
             this.mc.x = 100;
             this.mc.y = canvas.height - 150;
         }
@@ -237,11 +381,26 @@ const game = {
 
     renderLoop() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Apply screen shake
+        if (this.screenShake > 0) {
+            ctx.save();
+            ctx.translate(
+                Math.random() * this.screenShake - this.screenShake / 2,
+                Math.random() * this.screenShake - this.screenShake / 2
+            );
+        }
+        
         if (this.state === 'PLAY') {
             this.renderGameWorld();
         } else if (this.state === 'VICTORY') {
             this.renderEndScreen("CASE CLOSED", "#00ffcc", "You captured the Serial Killer and saved Fall Town!");
         }
+        
+        if (this.screenShake > 0) {
+            ctx.restore();
+        }
+        
         requestAnimationFrame(() => this.renderLoop());
     },
 
@@ -249,11 +408,23 @@ const game = {
         // Background render environment
         ctx.fillStyle = '#1a1a24';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        // Render Foggy Streets (Pixel Art Simulation Style grids)
+        
+        // Render Foggy Streets with day/night variation
         ctx.fillStyle = '#252535';
         for (let i = 0; i < canvas.height; i += 40) {
             ctx.fillRect(0, i, canvas.width, 2);
         }
+        
+        // Render flickering street lights
+        const lightY = canvas.height / 2 + 100;
+        for (let i = 100; i < canvas.width; i += 200) {
+            const flicker = Math.sin(Date.now() * 0.002 + i) * 10;
+            ctx.fillStyle = `rgba(255, 200, 100, ${0.5 + flicker * 0.02})`;
+            ctx.beginPath();
+            ctx.arc(i, lightY, 40, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
         // Draw HUD details
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 16px Courier New';
@@ -261,38 +432,86 @@ const game = {
         ctx.fillText(`Secrets Found: ${this.secretsFound}`, 20, 65);
         ctx.fillStyle = '#ff4500';
         ctx.fillText(`Objective: Walk to the Center Clue Target`, 20, 90);
-        // Render An Hidden Easter Egg location hint marker visually
+        
+        // Render Hidden Easter Egg location hint marker
         ctx.fillStyle = '#111116';
         ctx.fillRect(80, canvas.height - 120, 30, 30);
         ctx.fillStyle = '#444';
         ctx.font = '10px Courier New';
         ctx.fillText("Vending", 70, canvas.height - 130);
-        // Draw Central Clue Location Block / NPC
+        
+        // Draw Central Clue Location Block / NPC with animation
         let entityColor = (this.level === 100) ? '#ff0055' : '#00aa99';
+        const npcX = canvas.width / 2;
+        const npcY = canvas.height / 2 - 40;
+        
+        // NPC surprise animation
+        let npcOffsetY = 0;
+        if (this.npcAnimations.surprised > 0) {
+            npcOffsetY = Math.sin(this.npcAnimations.surprised * 0.2) * 10;
+            this.npcAnimations.surprised--;
+        }
+        
         ctx.fillStyle = entityColor;
-        ctx.fillRect(canvas.width / 2 - 20, canvas.height / 2 - 60, 40, 60);
+        ctx.fillRect(npcX - 20, npcY - 60 + npcOffsetY, 40, 60);
+        
+        // NPC glow effect
+        ctx.fillStyle = `rgba(0, 170, 153, ${0.3 + Math.sin(Date.now() * 0.005) * 0.2})`;
+        ctx.fillRect(npcX - 25, npcY - 65 + npcOffsetY, 50, 70);
+        
         ctx.fillStyle = '#fff';
         ctx.font = '12px Courier New';
-        ctx.fillText((this.level === 100) ? "BOSS" : "CLUE/NPC", canvas.width / 2 - 30, canvas.height / 2 - 70);
-        // Dynamic MC Pixel Rendering calculations
+        ctx.fillText((this.level === 100) ? "BOSS" : "CLUE/NPC", npcX - 30, npcY - 70 + npcOffsetY);
+        
+        // Draw Player Character with walking animation
         ctx.fillStyle = this.getSkinHex(this.mc.skin);
-        ctx.fillRect(this.mc.x - 15, this.mc.y - 50, 30, 50); // Body
+        
+        // Walking animation bobbing
+        let playerOffsetY = 0;
+        if (this.mc.isWalking) {
+            playerOffsetY = Math.sin((this.mc.walkFrame || 0) * 0.1) * 3;
+        }
+        
+        ctx.fillRect(this.mc.x - 15, this.mc.y - 50 + playerOffsetY, 30, 50); // Body
         ctx.fillStyle = this.getHairHex(this.mc.hair);
-        ctx.fillRect(this.mc.x - 17, this.mc.y - 55, 34, 15); // Hair Block Layer
+        ctx.fillRect(this.mc.x - 17, this.mc.y - 55 + playerOffsetY, 34, 15); // Hair
+        
+        // Player glow
+        ctx.fillStyle = `rgba(255, 69, 0, ${0.2 + Math.sin(Date.now() * 0.003) * 0.1})`;
+        ctx.beginPath();
+        ctx.arc(this.mc.x, this.mc.y - 25 + playerOffsetY, 35, 0, Math.PI * 2);
+        ctx.fill();
+        
         ctx.fillStyle = '#fff';
-        ctx.fillText("✨ MC", this.mc.x - 18, this.mc.y - 65);
+        ctx.font = '12px Courier New';
+        ctx.fillText("✨ MC", this.mc.x - 18, this.mc.y - 65 + playerOffsetY);
+        
+        // Draw all particles
+        this.particles.forEach(p => p.draw(ctx));
     },
 
     renderEndScreen(title, color, subtitle) {
         ctx.fillStyle = '#0a0a0f';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Animate title
+        const scale = 0.8 + Math.sin(Date.now() * 0.005) * 0.2;
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2 - 50);
+        ctx.scale(scale, scale);
         ctx.fillStyle = color;
         ctx.font = 'bold 36px Courier New';
         ctx.textAlign = 'center';
-        ctx.fillText(title, canvas.width / 2, canvas.height / 2 - 20);
+        ctx.fillText(title, 0, 0);
+        ctx.restore();
+        
         ctx.fillStyle = '#fff';
         ctx.font = '16px Courier New';
-        ctx.fillText(subtitle, canvas.width / 2, canvas.height / 2 + 30);
+        ctx.textAlign = 'center';
+        ctx.fillText(subtitle, canvas.width / 2, canvas.height / 2 + 80);
+        
+        // Draw victory particles
+        this.particles.forEach(p => p.draw(ctx));
     },
 
     getSkinHex(val) {
@@ -339,7 +558,9 @@ function startGame() {
         skin: document.getElementById('mcSkin').value,
         hair: document.getElementById('mcHair').value,
         cloth: document.getElementById('mcCloth').value,
-        x: 100, y: window.innerHeight - 150
+        x: 100, y: window.innerHeight - 150,
+        isWalking: false,
+        walkFrame: 0
     };
     game.li = {
         name: document.getElementById('liName').value,
@@ -347,7 +568,6 @@ function startGame() {
     };
     document.getElementById('customizer').style.display = 'none';
     game.state = 'PLAY';
-    // Launch Introduction Dialogue Setup
     game.showDialogue([
         { s: "SYSTEM", t: `Welcome to Fall Town. You are playing as a ${game.mc.gender} Detective.` },
         { s: game.li.name, t: "Glad you finally arrived, partner. We need to crack all 100 active cases in this town." },
